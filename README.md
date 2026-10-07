@@ -83,9 +83,66 @@ docker compose up --build
 - Streamlit UI: `http://localhost:8501`
 - Kafka UI: `http://localhost:8080`
 
+Первый запуск `fraud_detector` занимает несколько минут: сервис один раз обрабатывает весь `train.csv`. Дождитесь в логах строки `Starting Kafka ML scoring service` и `Train data processed`.
+
 Логи:
 
 ```bash
 docker compose logs fraud_detector
 docker compose logs interface
 ```
+
+## Как проверить работоспособность
+
+### 1. Подготовьте входной файл
+
+Нужен CSV со строками транзакций в формате `test.csv` соревнования, не файл сабмита с колонками `index,prediction`.
+
+Ожидаемые колонки:
+
+```text
+transaction_time, merch, cat_id, amount, name_1, name_2, gender, street,
+one_city, us_state, post_code, lat, lon, population_city, jobs,
+merchant_lat, merchant_lon
+```
+
+Для первой проверки достаточно 50–100 строк.
+
+### 2. Отправьте файл через интерфейс
+
+1. Откройте `http://localhost:8501`.
+2. Загрузите CSV.
+3. Нажмите кнопку отправки этого файла.
+
+### 3. Проверьте сообщения в Kafka UI
+
+Откройте `http://localhost:8080`.
+
+В топике `transactions` у каждого сообщения есть идентификатор и поля транзакции:
+
+```json
+{
+  "transaction_id": "uuid",
+  "data": {
+    "transaction_time": "2023-01-01 12:30:00",
+    "amount": 150.5
+  }
+}
+```
+
+В топике `scoring` у каждого сообщения есть скор модели и флаг фрода:
+
+```json
+{
+  "transaction_id": "uuid",
+  "score": 0.995,
+  "fraud_flag": 1
+}
+```
+
+Сервис отработал корректно, если:
+
+- число сообщений в `scoring` совпадает с числом отправленных строк;
+- `score` лежит в диапазоне от 0 до 1;
+- `fraud_flag` равен 0 или 1;
+- в `docker compose logs fraud_detector` нет строк `Error processing message`, а есть `Prediction complete`.
