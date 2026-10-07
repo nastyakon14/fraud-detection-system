@@ -18,13 +18,22 @@
    - читает сообщения из `transactions`;
    - выполняет препроцессинг признаков;
    - считает `score` и `fraud_flag` моделью CatBoost (`fraud_detector/models/my_catboost.cbm`);
-   - отправляет результат в Kafka-топик `scoring`.
+   - отправляет результат в Kafka-топик `scores`.
 
-3. Kafka-инфраструктура
+3. `score_writer`
+   - читает топик `scores` (`transaction_id`, `score`, `fraud_flag`);
+   - записывает каждую транзакцию в PostgreSQL, таблицу `transaction_scores`.
+
+4. `postgres`
+   - хранит витрину скоров в той же сети, что и остальные сервисы.
+
+5. Kafka-инфраструктура
    - `zookeeper`;
    - `kafka`;
-   - `kafka-setup` (создает топики `transactions` и `scoring`);
+   - `kafka-setup` (создает топики `transactions` и `scores`);
    - `kafka-ui` (порт `8080`) для проверки сообщений.
+
+В Streamlit по кнопке «Посмотреть результаты» показываются 10 последних транзакций с `fraud_flag = 1` и гистограмма скоров последних 100 транзакций.
 
 ## Структура проекта
 
@@ -37,21 +46,27 @@
 │   ├── requirements.txt
 │   ├── app.py
 │   └── .streamlit/config.toml
-└── fraud_detector/
-    ├── Dockerfile
-    ├── requirements.txt
-    ├── app/app.py
-    ├── src/preprocessing.py
-    ├── src/scorer.py
-    ├── models/my_catboost.cbm
-    └── train_data/train.csv
+├── fraud_detector/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── app/app.py
+│   ├── src/preprocessing.py
+│   ├── src/scorer.py
+│   ├── models/my_catboost.cbm
+│   └── train_data/train.csv
+├── score_writer/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── app.py
+└── postgres/
+    └── init.sql
 ```
 
 ## Требования
 
 - Docker 20.10+
 - Docker Compose v2
-- Свободные порты: `8501`, `8080`, `9095`, `2181`
+- Свободные порты: `8501`, `8080`, `9095`, `2181`, `5432`
 
 ## Подготовка train.csv перед запуском
 
@@ -89,6 +104,7 @@ docker compose up --build
 
 ```bash
 docker compose logs fraud_detector
+docker compose logs score_writer
 docker compose logs interface
 ```
 
@@ -130,7 +146,7 @@ merchant_lat, merchant_lon
 }
 ```
 
-В топике `scoring` у каждого сообщения есть скор модели и флаг фрода:
+В топике `scores` у каждого сообщения есть скор модели и флаг фрода:
 
 ```json
 {
@@ -142,7 +158,15 @@ merchant_lat, merchant_lon
 
 Сервис отработал корректно, если:
 
-- число сообщений в `scoring` совпадает с числом отправленных строк;
+- число сообщений в `scores` совпадает с числом отправленных строк;
 - `score` лежит в диапазоне от 0 до 1;
 - `fraud_flag` равен 0 или 1;
-- в `docker compose logs fraud_detector` нет строк `Error processing message`, а есть `Prediction complete`.
+- в `docker compose logs fraud_detector` нет строк `Error processing message`, а есть `Prediction complete`;
+- в `docker compose logs score_writer` есть строки `Saved transaction`.
+
+### 4. Посмотрите результаты в интерфейсе
+
+На странице `http://localhost:8501` нажмите «Посмотреть результаты».
+
+- Таблица показывает до 10 последних транзакций с `fraud_flag = 1`. Если таких строк нет, интерфейс пишет, что фродовых транзакций пока нет.
+- Под таблицей строится гистограмма скоров последних 100 транзакций. Если в базе меньше 100 строк, гистограмма строится по всем имеющимся.

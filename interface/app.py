@@ -5,6 +5,8 @@ import json
 import time
 import os
 import uuid
+import numpy as np
+import psycopg2
 
 # Конфигурация Kafka
 KAFKA_CONFIG = {
@@ -100,3 +102,56 @@ if st.session_state.uploaded_files:
                             st.rerun()
                 else:
                     st.error("Файл не содержит данных")
+
+# настраиваем коннектор к postgres
+def get_connection():
+    return psycopg2.connect(
+        host=os.getenv("POSTGRES_HOST", "postgres"),
+        port=os.getenv("POSTGRES_PORT", "5432"),
+        dbname=os.getenv("POSTGRES_DB", "fraud_detection"),
+        user=os.getenv("POSTGRES_USER", "postgres"),
+        password=os.getenv("POSTGRES_PASSWORD", "postgres"),
+    )
+
+# кнопка для проверки результатов 
+st.header("Результаты скоринга")
+if st.button("Посмотреть результаты"):
+    try:
+        connection = get_connection()
+        # результаты из postgres
+        fraud_df = pd.read_sql(
+            """
+            SELECT transaction_id, score, fraud_flag, created_at
+            FROM transaction_scores
+            WHERE fraud_flag = 1
+            ORDER BY created_at DESC
+            LIMIT 10
+            """,
+            connection,
+        )
+        # только скоры
+        scores_df = pd.read_sql(
+            """
+            SELECT score
+            FROM transaction_scores
+            ORDER BY created_at DESC
+            LIMIT 100
+            """,
+            connection,
+        )
+        connection.close()
+    except Exception as error:
+        st.error(f"Не удалось прочитать результаты из базы: {error}")
+    else:
+        st.subheader("10 последних транзакций с fraud_flag = 1")
+        if fraud_df.empty:
+            st.info("Фродовых транзакций пока нет")
+        st.dataframe(fraud_df)
+
+        st.subheader("Распределение скоров последних транзакций")
+        if scores_df.empty:
+            st.info("В базе пока нет скоров")
+        else:
+            counts, edges = np.histogram(scores_df["score"], bins=20)
+            labels = [f"{edges[i]:.2f}–{edges[i + 1]:.2f}" for i in range(len(counts))]
+            st.bar_chart(pd.DataFrame({"count": counts}, index=labels))

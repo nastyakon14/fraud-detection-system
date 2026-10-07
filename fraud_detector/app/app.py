@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Set kafka configuration file
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 TRANSACTIONS_TOPIC = os.getenv("KAFKA_TRANSACTIONS_TOPIC", "transactions")
-SCORING_TOPIC = os.getenv("KAFKA_SCORING_TOPIC", "scoring")
+SCORING_TOPIC = os.getenv("KAFKA_SCORING_TOPIC", "scores")
 
 
 class ProcessingService:
