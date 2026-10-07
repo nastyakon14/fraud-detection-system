@@ -41,7 +41,7 @@ def send_to_kafka(df, topic, bootstrap_servers):
                 topic, 
                 value={
                     "transaction_id": row['transaction_id'],
-                    "data": row.drop('transaction_id').to_dict()
+                    "data": json.loads(row.drop('transaction_id').to_json())
                 }
             )
             progress_bar.progress((idx + 1) / total_rows)

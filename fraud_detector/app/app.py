@@ -5,7 +5,6 @@ import time
 import logging
 import json
 from datetime import datetime
-
 from confluent_kafka import Consumer, Producer, KafkaError
 
 sys.path.append(os.path.abspath('./src'))
@@ -69,9 +68,14 @@ class ProcessingService:
                 submission['transaction_id'] = transaction_id
 
                 # Отправка результата в топик scoring
+                result = {
+                    'transaction_id': transaction_id,
+                    'score': float(submission['score'].iloc[0]),
+                    "fraud_flag": int(submission["fraud_flag"].iloc[0]),
+                }
                 self.producer.produce(
-                    'scoring',
-                    value=submission.to_json(orient='records')
+                    SCORING_TOPIC,
+                    value=json.dumps(result).encode('utf-8')
                 )
                 self.producer.flush()
             except Exception as e:
